@@ -8,6 +8,9 @@
 #define MAX_BUFFER	MAX_CHUNK_SIZE + 1024
 #define INT_BUFFER_SIZE	20
 
+#define REDIS_STAR	'*'
+#define REDIS_DOLLAR	'$'
+
 typedef struct{
 	uint32_t size;			//  4 bytes
 	char *data;			//  8 bytes, system dependent
@@ -24,12 +27,42 @@ typedef struct{
 
 static char *_datacat(char *dest, const char *src, uint32_t dest_size, uint32_t src_size);
 
-static int _proto_readln(const redis_client *r, uint32_t *pos);
+static int _proto_readln( const redis_client *r, uint32_t *pos);
 static int _proto_readint(const redis_client *r, uint32_t *pos);
-static int _proto_readparam(redis_client *r, uint32_t *pos, unsigned char index);
+static int _proto_readparam(    redis_client *r, uint32_t *pos, unsigned char index);
 
 inline void proto_clear(redis_client *r){
 	memset(r, 0, sizeof(*r));
+}
+
+int proto_isdone(redis_client *r){
+	if (r->buffer_size < 8)	// 4 bytes - "*1\r\n$1\r\n"
+		return 1;	// empty buffer
+
+	uint32_t pos = 0;
+
+	if (r->buffer[pos] != REDIS_STAR)
+		return 2;	// no * at the beginnging
+
+	pos++;
+
+	int paramcount = _proto_readint(r, & pos);
+
+	if (paramcount == 0 || paramcount > MAX_CHUNKS)
+		return 3; 	// param count can not be 0
+
+	if ( _proto_readln(r, & pos) )
+		return 4;	// no \r\n
+
+	unsigned char i;
+	for(i = 0; i < paramcount; i++){
+		if (_proto_readparam(r, & pos, i))
+			return 5;
+	}
+
+	r->chunk_count = paramcount;
+
+	return 0;
 }
 
 int proto_feed(redis_client *r, const char *data, uint32_t data_size){
@@ -54,36 +87,6 @@ int proto_feed(redis_client *r, const char *data, uint32_t data_size){
 
 inline int proto_feeds(redis_client *r, const char *data){
 	return proto_feed(r, data, strlen(data));
-}
-
-int proto_isdone(redis_client *r){
-	if (r->buffer_size < 4)	// 4 bytes - "*1\r\n"
-		return 1;	// empty buffer
-
-	uint32_t pos = 0;
-
-	if (r->buffer[pos] != '*')
-		return 2;	// no * at the beginnging
-
-	pos++;
-
-	int paramcount = _proto_readint(r, & pos);
-
-	if (paramcount == 0 || paramcount > MAX_CHUNKS)
-		return 3; 	// param count can not be 0
-
-	if ( _proto_readln(r, & pos) )
-		return 4;	// no \r\n
-
-	unsigned char i;
-	for(i = 0; i < paramcount; i++){
-		if (_proto_readparam(r, & pos, i))
-			return 5;
-	}
-
-	r->chunk_count = paramcount;
-
-	return 0;
 }
 
 void proto_dump(redis_client *r){
@@ -134,7 +137,7 @@ int main(){
 
 static int _proto_readln(const redis_client *r, uint32_t *pos){
 	const char *src = r->buffer;
-	uint32_t src_size = r->buffer_size;
+	//uint32_t src_size = r->buffer_size;
 
 	if (src[*pos] == '\r' && src[(*pos) + 1] == '\n'){
 		*pos = (*pos) + 2;
@@ -154,8 +157,8 @@ static int _proto_readint(const redis_client *r, uint32_t *pos){
 	for(;*pos < src_size && buff_pos < INT_BUFFER_SIZE; (*pos)++){
 		char c = src[*pos];
 
-		if (c < '0' || c > '9')
-			break;
+		if (c != '-' && c != '+' && (c < '0' || c > '9') )
+				break;
 
 		buff[buff_pos] = c;
 		buff_pos++;
@@ -170,7 +173,7 @@ static int _proto_readparam(redis_client *r, uint32_t *pos, unsigned char index)
 	char *src = r->buffer;
 	uint32_t src_size = r->buffer_size;
 
-	if (r->buffer[*pos] != '$')
+	if (r->buffer[*pos] != REDIS_DOLLAR)
 		return 1;	// no $ at the beginnging
 
 	(*pos)++;
