@@ -24,7 +24,9 @@ typedef struct{
 
 static char *_datacat(char *dest, const char *src, uint32_t dest_size, uint32_t src_size);
 
-
+static int _proto_readln(const redis_client *r, uint32_t *pos);
+static int _proto_readint(const redis_client *r, uint32_t *pos);
+static int _proto_readparam(redis_client *r, uint32_t *pos, unsigned char index);
 
 inline void proto_clear(redis_client *r){
 	memset(r, 0, sizeof(*r));
@@ -52,72 +54,6 @@ int proto_feed(redis_client *r, const char *data, uint32_t data_size){
 
 inline int proto_feeds(redis_client *r, const char *data){
 	return proto_feed(r, data, strlen(data));
-}
-
-static int _proto_readln(const redis_client *r, uint32_t *pos){
-	const char *src = r->buffer;
-	uint32_t src_size = r->buffer_size;
-
-	if (src[*pos] == '\r' && src[(*pos) + 1] == '\n'){
-		*pos = (*pos) + 2;
-		return 0;
-	}
-
-	return 1;
-}
-
-static int _proto_readint(const redis_client *r, uint32_t *pos){
-	const char *src = r->buffer;
-	uint32_t src_size = r->buffer_size;
-
-	char buff[INT_BUFFER_SIZE + 1];
-	unsigned char buff_pos = 0;
-
-	for(;*pos < src_size && buff_pos < INT_BUFFER_SIZE; (*pos)++){
-		char c = src[*pos];
-
-		if (c < '0' || c > '9')
-			break;
-
-		buff[buff_pos] = c;
-		buff_pos++;
-	}
-
-	buff[buff_pos] = '\0';
-
-	return atoi(buff);
-}
-
-static int _proto_readparam(redis_client *r, uint32_t *pos, unsigned char index){
-	char *src = r->buffer;
-	uint32_t src_size = r->buffer_size;
-
-	if (r->buffer[*pos] != '$')
-		return 1;	// no $ at the beginnging
-
-	(*pos)++;
-
-	int size = _proto_readint(r, pos);
-	if (size <= 0 || size > MAX_CHUNK_SIZE)
-		return 2;	// too big chunk
-
-	if ( _proto_readln(r, pos) )
-		return 3;	// no \r\n
-
-	// store size and data
-	r->chunks[index].size = size;
-	r->chunks[index].data = & src[*pos];
-
-	// the pointer is set. however we need to check if all data is there.
-	*pos = *pos + size;
-
-	if (*pos > src_size)
-		return 4;	// data not received completely yet.
-
-	if ( _proto_readln(r, pos) )
-		return 3;	// no \r\n
-
-	return 0;
 }
 
 int proto_isdone(redis_client *r){
@@ -190,6 +126,74 @@ int main(){
 
 	_proto_test(r, "*3\r\n$3\r\nSET\r\n$2\r\nBG\r\n$5\r\nSofia\r\n");
 	_proto_test(r, "*2\r\n$3\r\nGET\r\n$2\r\nBG\r\n");
+
+	return 0;
+}
+
+
+
+static int _proto_readln(const redis_client *r, uint32_t *pos){
+	const char *src = r->buffer;
+	uint32_t src_size = r->buffer_size;
+
+	if (src[*pos] == '\r' && src[(*pos) + 1] == '\n'){
+		*pos = (*pos) + 2;
+		return 0;
+	}
+
+	return 1;
+}
+
+static int _proto_readint(const redis_client *r, uint32_t *pos){
+	const char *src = r->buffer;
+	uint32_t src_size = r->buffer_size;
+
+	char buff[INT_BUFFER_SIZE + 1];
+	unsigned char buff_pos = 0;
+
+	for(;*pos < src_size && buff_pos < INT_BUFFER_SIZE; (*pos)++){
+		char c = src[*pos];
+
+		if (c < '0' || c > '9')
+			break;
+
+		buff[buff_pos] = c;
+		buff_pos++;
+	}
+
+	buff[buff_pos] = '\0';
+
+	return atoi(buff);
+}
+
+static int _proto_readparam(redis_client *r, uint32_t *pos, unsigned char index){
+	char *src = r->buffer;
+	uint32_t src_size = r->buffer_size;
+
+	if (r->buffer[*pos] != '$')
+		return 1;	// no $ at the beginnging
+
+	(*pos)++;
+
+	int size = _proto_readint(r, pos);
+	if (size <= 0 || size > MAX_CHUNK_SIZE)
+		return 2;	// too big chunk
+
+	if ( _proto_readln(r, pos) )
+		return 3;	// no \r\n
+
+	// store size and data
+	r->chunks[index].size = size;
+	r->chunks[index].data = & src[*pos];
+
+	// the pointer is set. however we need to check if all data is there.
+	*pos = *pos + size;
+
+	if (*pos > src_size)
+		return 4;	// data not received completely yet.
+
+	if ( _proto_readln(r, pos) )
+		return 3;	// no \r\n
 
 	return 0;
 }
