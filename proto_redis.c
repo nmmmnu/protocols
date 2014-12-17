@@ -1,36 +1,28 @@
+#include "proto_redis.h"
+
 #include <stdio.h>
 #include <stdlib.h>
-#include <stdint.h>
 #include <string.h>
 
-#define MAX_CHUNKS	3
-#define MAX_CHUNK_SIZE	1024 * 64
+#define MAX_CHUNKS	PROTO_REDIS_MAX_CHUNKS
+#define MAX_CHUNK_SIZE	PROTO_REDIS_MAX_CHUNK_SIZE
 #define MAX_BUFFER	MAX_CHUNK_SIZE + 1024
 #define INT_BUFFER_SIZE	20
 
 #define REDIS_STAR	'*'
 #define REDIS_DOLLAR	'$'
 
-typedef struct{
-	uint32_t size;			//  4 bytes
-	const char *data;			//  8 bytes, system dependent
-} proto_chunk;
+static const char* g_proto_error;
 
-typedef struct{
-	unsigned char chunk_count;	//  1 bytes
-	proto_chunk chunks[MAX_CHUNKS];	//  3 x 10  bytes
-} proto_client;
-
-static int _proto_readln(   const proto_client *r, const char *src, int src_size, uint32_t *pos);
-static int _proto_readint(  const proto_client *r, const char *src, int src_size, uint32_t *pos);
-static int _proto_readparam_redis(proto_client *r, const char *src, int src_size, uint32_t *pos, unsigned char index);
-
-const char* g_proto_error;
 #define  ERR_BUFFER_NOT_READ	"buffer not read complete, non fatal error"
 #define  ERR_NO_STAR		"no * at the beginnging"
 #define  ERR_NO_DOLLAR		"no $ at the beginnging"
 #define  ERR_PARAM_COUNT	"param count can not be 0 or can not be more than MAX_CHUNKS"
 #define  ERR_BIG_CHUNK		"chunk too big"
+
+static int _proto_readln(         const char *src, int src_size, uint32_t *pos);
+static int _proto_readint(        const char *src, int src_size, uint32_t *pos);
+static int _proto_readparam_redis(const char *src, int src_size, uint32_t *pos, proto_chunk *chunk);
 
 int proto_parse_redis(proto_client *r, const char *src, int src_size){
 	memset(r, 0, sizeof(*r));
@@ -54,7 +46,7 @@ int proto_parse_redis(proto_client *r, const char *src, int src_size){
 		return -1;
 	}
 
-	int paramcount = _proto_readint(r, src, src_size, & pos);
+	int paramcount = _proto_readint(src, src_size, & pos);
 
 	if (paramcount == 0 || paramcount > MAX_CHUNKS){
 		g_proto_error = ERR_PARAM_COUNT;
@@ -62,12 +54,12 @@ int proto_parse_redis(proto_client *r, const char *src, int src_size){
 	}
 
 	int ln;
-	if ((ln = _proto_readln(r, src, src_size, & pos)))
+	if ((ln = _proto_readln(src, src_size, & pos)))
 		return ln;	// no \r\n
 
 	unsigned char i;
 	for(i = 0; i < paramcount; i++){
-		if ((ln = _proto_readparam_redis(r, src, src_size, & pos, i)))
+		if ((ln = _proto_readparam_redis(src, src_size, & pos, & r->chunks[i])))
 			return ln;
 	}
 
@@ -98,7 +90,7 @@ void proto_dump(const proto_client *r){
 	}
 }
 
-static int _proto_readln(const proto_client *r, const char *src, int src_size, uint32_t *pos){
+static int _proto_readln(const char *src, int src_size, uint32_t *pos){
 	if (*pos + 2 > src_size){
 		g_proto_error = ERR_BUFFER_NOT_READ;
 		return -1;
@@ -112,7 +104,7 @@ static int _proto_readln(const proto_client *r, const char *src, int src_size, u
 	return 1;
 }
 
-static int _proto_readint(const proto_client *r, const char *src, int src_size, uint32_t *pos){
+static int _proto_readint(const char *src, int src_size, uint32_t *pos){
 	char buff[INT_BUFFER_SIZE + 1];
 	unsigned char buff_pos = 0;
 
@@ -131,7 +123,7 @@ static int _proto_readint(const proto_client *r, const char *src, int src_size, 
 	return atoi(buff);
 }
 
-static int _proto_readparam_redis(proto_client *r, const char *src, int src_size, uint32_t *pos, unsigned char index){
+static int _proto_readparam_redis(const char *src, int src_size, uint32_t *pos, proto_chunk *chunk){
 	if (*pos + 1 > src_size){
 		g_proto_error = ERR_BUFFER_NOT_READ;
 		return -1;
@@ -149,19 +141,19 @@ static int _proto_readparam_redis(proto_client *r, const char *src, int src_size
 		return -1;
 	}
 
-	int size = _proto_readint(r, src, src_size, pos);
+	int size = _proto_readint(src, src_size, pos);
 	if (size <= 0 || size > MAX_CHUNK_SIZE){
 		g_proto_error = ERR_BIG_CHUNK;
 		return 2;
 	}
 
 	int ln;
-	if ((ln = _proto_readln(r, src, src_size, pos)))
+	if ((ln = _proto_readln(src, src_size, pos)))
 		return ln;	// no \r\n
 
 	// store size and data
-	r->chunks[index].size = size;
-	r->chunks[index].data = & src[*pos];
+	chunk->size = size;
+	chunk->data = & src[*pos];
 
 	// the pointer is set. however we need to check if all data is there.
 	*pos = *pos + size;
@@ -171,60 +163,12 @@ static int _proto_readparam_redis(proto_client *r, const char *src, int src_size
 		return -4;
 	}
 
-	if ((ln = _proto_readln(r, src, src_size, pos)))
+	if ((ln = _proto_readln(src, src_size, pos)))
 		return ln;	// no \r\n
 
 	return 0;
 }
 
-
-
-static inline void _proto_test_redis(proto_client *r, const char *test){
-	printf("Test #2 - incremental add\n");
-
-	size_t size = strlen(test);
-	char btest[size + 1];
-
-	int result;
-	unsigned char i;
-	for(i = 0; i < size; i++){
-		btest[i] = test[i];
-		btest[i + 1] = '\0';
-
-		result = proto_parse_redis(r, btest, strlen(btest));
-
-		printf("%3u | %5d\n", i, result);
-
-		if (result > 0){
-			printf("Test FAIL!!!\n");
-			printf("Buffer: %s\n", btest);
-			printf("Last Error: %s\n", g_proto_error);
-			return;
-		}
-	}
-
-	printf("proto_parse_redis = %d\n", result);
-
-	proto_dump(r);
-
-	printf("OK\n");
-}
-
-
-int main(){
-	proto_client r_placeholder;
-	proto_client *r = & r_placeholder;
-
-	_proto_test_redis(r, "*2\r\n$3\r\nGET\r\n$2\r\nBG\r\n");
-	_proto_test_redis(r, "*3\r\n$3\r\nSET\r\n$2\r\nBG\r\n$5\r\nSofia\r\n");
-
-//	_proto_test_redis(r, "*3\r\n$2\r\nSET\r\n$2\r\nBG\r\n$5\r\nSofia\r\n");
-//	_proto_test_redis(r, "*2\r\n$5\r\nSET\r\n$2\r\nBG\r\n$5\r\nSofia\r\n");
-//	_proto_test_redis(r, "*42\r\n$5\r\nSET\r\n$2\r\nBG\r\n$5\r\nSofia\r\n");
-//	_proto_test_redis(r, "*\r\n$5\r\nSET\r\n$2\r\nBG\r\n$5\r\nSofia\r\n");
-
-	return 0;
-}
 
 
 

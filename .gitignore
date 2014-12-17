@@ -1,2 +1,3 @@
 a.out
-
+proto_redis_test
+*.o
