@@ -1,4 +1,4 @@
-#include "proto_redis.h"
+#include "proto.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -15,19 +15,19 @@ static void _proto_test_redis(proto_client *r, const char *test){
 		btest[i] = test[i];
 		btest[i + 1] = '\0';
 
-		result = proto_parse_redis(r, btest, strlen(btest));
+		result = proto_parse(r, btest, strlen(btest));
 
 		printf("%3u | %5d\n", i, result);
 
 		if (result > 0){
 			printf("Test FAIL!!!\n");
 			printf("Buffer: %s\n", btest);
-			printf("Last Error: %s\n", g_proto_error);
+			printf("Last Error: %s\n", proto_error());
 			return;
 		}
 	}
 
-	printf("proto_parse_redis = %d\n", result);
+	printf("proto_parse = %d\n", result);
 
 	proto_dump(r);
 

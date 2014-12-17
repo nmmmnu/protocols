@@ -16,9 +16,9 @@ proto_redis_test: proto_redis.o proto_redis_test.o
 	$(LINK) proto_redis_test proto_redis.o proto_redis_test.o
 
 
-proto_redis_test.o: proto_redis_test.c proto_redis.h
+proto_redis_test.o: proto_redis_test.c proto.h
 	$(CC) proto_redis_test.c
 
-proto_redis.o: proto_redis.c proto_redis.h
+proto_redis.o: proto_redis.c proto.h
 	$(CC) proto_redis.c
 
