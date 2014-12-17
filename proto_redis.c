@@ -13,50 +13,42 @@
 
 typedef struct{
 	uint32_t size;			//  4 bytes
-	char *data;			//  8 bytes, system dependent
-} redis_chunk;
+	const char *data;			//  8 bytes, system dependent
+} proto_chunk;
 
 typedef struct{
 	unsigned char chunk_count;	//  1 bytes
-	redis_chunk chunks[MAX_CHUNKS];	//  3 x 10  bytes
-	uint32_t buffer_size;		//  8 bytes, system dependent
-	char *buffer;			//  8 bytes, system dependent
-} redis_client;
+	proto_chunk chunks[MAX_CHUNKS];	//  3 x 10  bytes
+} proto_client;
 
+static int _proto_readln( const proto_client *r, const char *buffer, int buffer_size, uint32_t *pos);
+static int _proto_readint(const proto_client *r, const char *buffer, int buffer_size, uint32_t *pos);
+static int _proto_readparam_redis(    proto_client *r, const char *buffer, int buffer_size, uint32_t *pos, unsigned char index);
 
-
-static char *_datacat(char *dest, const char *src, uint32_t dest_size, uint32_t src_size);
-
-static int _proto_readln( const redis_client *r, uint32_t *pos);
-static int _proto_readint(const redis_client *r, uint32_t *pos);
-static int _proto_readparam(    redis_client *r, uint32_t *pos, unsigned char index);
-
-inline void proto_clear(redis_client *r){
+int proto_parse_redis(proto_client *r, const char *buffer, int buffer_size){
 	memset(r, 0, sizeof(*r));
-}
 
-int proto_isdone(redis_client *r){
-	if (r->buffer_size < 8)	// 4 bytes - "*1\r\n$1\r\n"
+	if (buffer_size < 8)	// 4 bytes - "*1\r\n$1\r\n"
 		return 1;	// empty buffer
 
 	uint32_t pos = 0;
 
-	if (r->buffer[pos] != REDIS_STAR)
+	if (buffer[pos] != REDIS_STAR)
 		return 2;	// no * at the beginnging
 
 	pos++;
 
-	int paramcount = _proto_readint(r, & pos);
+	int paramcount = _proto_readint(r, buffer, buffer_size, & pos);
 
 	if (paramcount == 0 || paramcount > MAX_CHUNKS)
 		return 3; 	// param count can not be 0
 
-	if ( _proto_readln(r, & pos) )
+	if ( _proto_readln(r, buffer, buffer_size, & pos) )
 		return 4;	// no \r\n
 
 	unsigned char i;
 	for(i = 0; i < paramcount; i++){
-		if (_proto_readparam(r, & pos, i))
+		if (_proto_readparam_redis(r, buffer, buffer_size, & pos, i))
 			return 5;
 	}
 
@@ -65,31 +57,7 @@ int proto_isdone(redis_client *r){
 	return 0;
 }
 
-int proto_feed(redis_client *r, const char *data, uint32_t data_size){
-	if (!proto_isdone(r))
-		return -1;	// done already
-
-	uint32_t buff_size = r->buffer_size + data_size;
-
-	if (buff_size > MAX_BUFFER)
-		return 1;	// responce too big
-
-	char *buff = _datacat(r->buffer, data, r->buffer_size, data_size);
-
-	if (buff == NULL)
-		return 2;	// out of memory
-
-	r->buffer = buff;
-	r->buffer_size = buff_size;
-
-	return 0;
-}
-
-inline int proto_feeds(redis_client *r, const char *data){
-	return proto_feed(r, data, strlen(data));
-}
-
-void proto_dump(redis_client *r){
+void proto_dump(const proto_client *r){
 	if (! r->chunk_count){
 		printf("no data\n");
 		return;
@@ -101,7 +69,7 @@ void proto_dump(redis_client *r){
 	for(i = 0; i < r->chunk_count; i++){
 		uint32_t size = r->chunks[i].size;
 
-		char *data = r->chunks[i].data;
+		const char *data = r->chunks[i].data;
 
 		if (size){
 			printf("%u | %5d | %.*s\n", i, size, size, data);
@@ -111,34 +79,54 @@ void proto_dump(redis_client *r){
 	}
 }
 
-static inline void _proto_test(redis_client *r, const char *s){
-	proto_clear(r);
-
-	proto_feeds(r, s);
-
-	int x = proto_isdone(r);
+static inline void _proto_test_redis(proto_client *r, const char *s){
+	int x = proto_parse_redis(r, s, strlen(s));
 
 	printf("proto_isdone = %d\n", x);
 
 	proto_dump(r);
 }
 
-int main(){
-	redis_client r_placeholder;
-	redis_client *r = & r_placeholder;
+/*
+int proto_feed(proto_client *r, const char *data, uint32_t data_size){
+	if (!proto_isdone(r))
+		return -1;	// done already
 
-	_proto_test(r, "*3\r\n$3\r\nSET\r\n$2\r\nBG\r\n$5\r\nSofia\r\n");
-	_proto_test(r, "*2\r\n$3\r\nGET\r\n$2\r\nBG\r\n");
+	uint32_t buff_size = buffer_size + data_size;
+
+	if (buff_size > MAX_BUFFER)
+		return 1;	// responce too big
+
+	char *buff = _datacat(buffer, data, r->buffer_size, data_size);
+
+	if (buff == NULL)
+		return 2;	// out of memory
+
+	r->buffer = buff;
+	r->buffer_size = buff_size;
+
+	return 0;
+}
+
+inline int proto_feeds(proto_client *r, const char *data){
+	return proto_feed(r, data, strlen(data));
+}
+
+*/
+
+int main(){
+	proto_client r_placeholder;
+	proto_client *r = & r_placeholder;
+
+	_proto_test_redis(r, "*3\r\n$3\r\nSET\r\n$2\r\nBG\r\n$5\r\nSofia\r\n");
+	_proto_test_redis(r, "*2\r\n$3\r\nGET\r\n$2\r\nBG\r\n");
 
 	return 0;
 }
 
 
 
-static int _proto_readln(const redis_client *r, uint32_t *pos){
-	const char *src = r->buffer;
-	//uint32_t src_size = r->buffer_size;
-
+static int _proto_readln(const proto_client *r, const char *src, int src_size, uint32_t *pos){
 	if (src[*pos] == '\r' && src[(*pos) + 1] == '\n'){
 		*pos = (*pos) + 2;
 		return 0;
@@ -147,10 +135,7 @@ static int _proto_readln(const redis_client *r, uint32_t *pos){
 	return 1;
 }
 
-static int _proto_readint(const redis_client *r, uint32_t *pos){
-	const char *src = r->buffer;
-	uint32_t src_size = r->buffer_size;
-
+static int _proto_readint(const proto_client *r, const char *src, int src_size, uint32_t *pos){
 	char buff[INT_BUFFER_SIZE + 1];
 	unsigned char buff_pos = 0;
 
@@ -169,20 +154,17 @@ static int _proto_readint(const redis_client *r, uint32_t *pos){
 	return atoi(buff);
 }
 
-static int _proto_readparam(redis_client *r, uint32_t *pos, unsigned char index){
-	char *src = r->buffer;
-	uint32_t src_size = r->buffer_size;
-
-	if (r->buffer[*pos] != REDIS_DOLLAR)
+static int _proto_readparam_redis(proto_client *r, const char *src, int src_size, uint32_t *pos, unsigned char index){
+	if (src[*pos] != REDIS_DOLLAR)
 		return 1;	// no $ at the beginnging
 
 	(*pos)++;
 
-	int size = _proto_readint(r, pos);
+	int size = _proto_readint(r, src, src_size, pos);
 	if (size <= 0 || size > MAX_CHUNK_SIZE)
 		return 2;	// too big chunk
 
-	if ( _proto_readln(r, pos) )
+	if ( _proto_readln(r, src, src_size, pos) )
 		return 3;	// no \r\n
 
 	// store size and data
@@ -195,14 +177,14 @@ static int _proto_readparam(redis_client *r, uint32_t *pos, unsigned char index)
 	if (*pos > src_size)
 		return 4;	// data not received completely yet.
 
-	if ( _proto_readln(r, pos) )
+	if ( _proto_readln(r, src, src_size, pos) )
 		return 3;	// no \r\n
 
 	return 0;
 }
 
 
-
+/*
 static char *_datacat(char *dest, const char *src, uint32_t dest_size, uint32_t src_size){
 	if (src_size == 0)
 		return dest;
@@ -216,5 +198,5 @@ static char *_datacat(char *dest, const char *src, uint32_t dest_size, uint32_t 
 
 	return buff;
 }
-
+*/
 
