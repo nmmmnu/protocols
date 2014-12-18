@@ -3,9 +3,9 @@
 
 #include <stdint.h>
 
-#define PROTO_MAX_CHUNKS	4
-#define PROTO_MAX_CHUNK_SIZE	1024 * 64
-#define PROTO_MAX_BUFFER	PROTO_MAX_CHUNK_SIZE + 1024
+#define PROTO_MAXCHUNKS		4
+#define PROTO_MAXCHUNKSIZE	1024 * 64
+#define PROTO_MAXBUFFER		PROTO_MAXCHUNKSIZE + 1024
 
 typedef struct{
 	uint32_t size;				//  4 bytes
@@ -14,14 +14,14 @@ typedef struct{
 
 typedef struct{
 	unsigned char chunk_count;		//  1 bytes
-	proto_chunk_t chunks[PROTO_MAX_CHUNKS];	//  PROTO_MAX_CHUNKS x 12  bytes
+	proto_chunk_t chunks[PROTO_MAXCHUNKS];	//  PROTO_MAX_CHUNKS x 12  bytes
 } proto_client_t;
 
 typedef enum {
-	PROTO_RESPONSE_OK,
-	PROTO_RESPONSE_ERR,
-	PROTO_RESPONSE_VALUE,
-	PROTO_RESPONSE_NOT_FOUND
+	PROTO_RESPONSEOK,
+	PROTO_RESPONSEERR,
+	PROTO_RESPONSEVALUE,
+	PROTO_RESPONSENOTFOUND
 } proto_response_status_t;
 
 typedef struct{

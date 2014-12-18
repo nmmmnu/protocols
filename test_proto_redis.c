@@ -56,12 +56,12 @@ int main(){
 //	_test_redis(r, "*42\r\n$5\r\nSET\r\n$2\r\nBG\r\n$5\r\nSofia\r\n");
 //	_test_redis(r, "*\r\n$5\r\nSET\r\n$2\r\nBG\r\n$5\r\nSofia\r\n");
 
-	_test_redis_resp(proto_response(PROTO_RESPONSE_OK,		NULL, 0));
-	_test_redis_resp(proto_response(PROTO_RESPONSE_ERR,		NULL, 0));
-	_test_redis_resp(proto_response(PROTO_RESPONSE_NOT_FOUND,	NULL, 0));
+	_test_redis_resp(proto_response(PROTO_RESPONSEOK,	NULL, 0));
+	_test_redis_resp(proto_response(PROTO_RESPONSEERR,	NULL, 0));
+	_test_redis_resp(proto_response(PROTO_RESPONSENOTFOUND,	NULL, 0));
 
-	_test_redis_resp(proto_response(PROTO_RESPONSE_VALUE,		"hello", 5));
-	_test_redis_resp(proto_response(PROTO_RESPONSE_VALUE,		"sir", 3));
+	_test_redis_resp(proto_response(PROTO_RESPONSEVALUE,	"hello", 5));
+	_test_redis_resp(proto_response(PROTO_RESPONSEVALUE,	"sir", 3));
 
 	return 0;
 }

@@ -4,9 +4,9 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define MAX_CHUNKS	PROTO_MAX_CHUNKS
-#define MAX_CHUNK_SIZE	PROTO_MAX_CHUNK_SIZE
-#define MAX_BUFFER	PROTO_MAX_BUFFER
+#define MAX_CHUNKS	PROTO_MAXCHUNKS
+#define MAX_CHUNK_SIZE	PROTO_MAXCHUNKSIZE
+#define MAX_BUFFER	PROTO_MAXBUFFER
 #define INT_BUFFER_SIZE	20
 
 #define _STR(x)	#x
@@ -24,7 +24,7 @@ static const char* g_proto_error;
 #define  ERR_BUFFER_NOT_READ	"buffer not read complete, non fatal error"
 #define  ERR_NO_STAR		"no " _STR(REDIS_STAR)   " at the beginnging"
 #define  ERR_NO_DOLLAR		"no " _STR(REDIS_DOLLAR) " at the beginnging"
-#define  ERR_PARAM_COUNT	"param count can not be 0 or can not be more than " _STR(PROTO_MAX_CHUNKS)
+#define  ERR_PARAM_COUNT	"param count can not be 0 or can not be more than " _STR(PROTO_MAXCHUNKS)
 #define  ERR_BIG_CHUNK		"chunk too big"
 
 static int _proto_readln(const char *src, int src_size, uint32_t *pos);
@@ -49,16 +49,16 @@ int proto_parse(proto_client_t *r, const char *src, uint32_t src_size){
 
 proto_response_buffer_t *proto_response(proto_response_status_t status, const char *data, uint32_t data_size){
 	switch(status){
-	case PROTO_RESPONSE_OK:
+	case PROTO_RESPONSEOK:
 		return _proto_response_allocate_string(REDIS_OK);
 
-	case PROTO_RESPONSE_NOT_FOUND:
+	case PROTO_RESPONSENOTFOUND:
 		return _proto_response_allocate_string(REDIS_NOT_FOUND);
 
-	case PROTO_RESPONSE_VALUE:
+	case PROTO_RESPONSEVALUE:
 		return _proto_response_allocate_value(data, data_size);
 
-	case PROTO_RESPONSE_ERR:
+	case PROTO_RESPONSEERR:
 	default:
 		return _proto_response_allocate_string(REDIS_ERR);
 

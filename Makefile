@@ -3,12 +3,12 @@ LINK = gcc -o
 
 
 
-all: proto_redis_test
+all: test_proto_redis
 
 
 
 clean:
-	rm -f *.o proto_redis_test
+	rm -f *.o test_proto_redis
 
 
 
@@ -16,8 +16,9 @@ proto_redis_test: proto_redis.o proto_redis_test.o
 	$(LINK) proto_redis_test proto_redis.o proto_redis_test.o
 
 
-proto_redis_test.o: proto_redis_test.c proto.h
-	$(CC) proto_redis_test.c
+
+test_proto_redis.o: test_proto_redis.c proto.h
+	$(CC) test_proto_redis.c
 
 proto_redis.o: proto_redis.c proto.h
 	$(CC) proto_redis.c
