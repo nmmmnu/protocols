@@ -9,20 +9,31 @@
 #define MAX_BUFFER	PROTO_MAX_BUFFER
 #define INT_BUFFER_SIZE	20
 
+#define _STR(x)	#x
+
 #define REDIS_STAR	'*'
 #define REDIS_DOLLAR	'$'
 
-#define STR_HELPER(x) #x
+#define REDIS_OK	"+OK\r\n"
+#define REDIS_ERR	"-ERR Error\r\n"
+#define REDIS_NOT_FOUND	_STR(REDIS_DOLLAR) "-1\r\n"
+#define REDIS_VALUE	_STR(REDIS_DOLLAR) "%u\r\n%.*s\r\n"
 
-const char* g_proto_error;
+static const char* g_proto_error;
 
 #define  ERR_BUFFER_NOT_READ	"buffer not read complete, non fatal error"
-#define  ERR_NO_STAR		"no " STR_HELPER(REDIS_STAR)   " at the beginnging"
-#define  ERR_NO_DOLLAR		"no " STR_HELPER(REDIS_DOLLAR) " at the beginnging"
-#define  ERR_PARAM_COUNT	"param count can not be 0 or can not be more than " STR_HELPER(PROTO_MAX_CHUNKS)
+#define  ERR_NO_STAR		"no " _STR(REDIS_STAR)   " at the beginnging"
+#define  ERR_NO_DOLLAR		"no " _STR(REDIS_DOLLAR) " at the beginnging"
+#define  ERR_PARAM_COUNT	"param count can not be 0 or can not be more than " _STR(PROTO_MAX_CHUNKS)
 #define  ERR_BIG_CHUNK		"chunk too big"
 
+static int _proto_readln(const char *src, int src_size, uint32_t *pos);
+static int _proto_readint(const char *src, int src_size, uint32_t *pos);
+static int _proto_readparam_redis(const char *src, int src_size, uint32_t *pos, proto_chunk_t *chunk);
+static int _proto_parse_redis(proto_client_t *r, const char *src, uint32_t src_size);
 
+static proto_response_buffer_t *_proto_response_allocate_string(const char *data);
+static proto_response_buffer_t *_proto_response_allocate_value(const char *value, uint32_t value_size);
 
 const char *proto_system(){
 	return "redis";
@@ -30,6 +41,50 @@ const char *proto_system(){
 
 const char *proto_error(){
 	return g_proto_error;
+}
+
+int proto_parse(proto_client_t *r, const char *src, uint32_t src_size){
+	return _proto_parse_redis(r, src, src_size);
+}
+
+proto_response_buffer_t *proto_response(proto_response_status_t status, const char *data, uint32_t data_size){
+	switch(status){
+	case PROTO_RESPONSE_OK:
+		return _proto_response_allocate_string(REDIS_OK);
+
+	case PROTO_RESPONSE_NOT_FOUND:
+		return _proto_response_allocate_string(REDIS_NOT_FOUND);
+
+	case PROTO_RESPONSE_VALUE:
+		return _proto_response_allocate_value(data, data_size);
+
+	case PROTO_RESPONSE_ERR:
+	default:
+		return _proto_response_allocate_string(REDIS_ERR);
+
+	}
+}
+
+void proto_dump(const proto_client_t *r){
+	printf("Listing redis client %p\n", r);
+
+	if (! r->chunk_count){
+		printf("no data\n");
+		return;
+	}
+
+	unsigned char i;
+	for(i = 0; i < r->chunk_count; i++){
+		uint32_t size = r->chunks[i].size;
+
+		const char *data = r->chunks[i].data;
+
+		if (size){
+			printf("%u | %5d | %.*s\n", i, size, size, data);
+		}else{
+			printf("%u | %5d | %s\n", i, size, "(none)");
+		}
+	}
 }
 
 static int _proto_readln(const char *src, int src_size, uint32_t *pos){
@@ -65,7 +120,7 @@ static int _proto_readint(const char *src, int src_size, uint32_t *pos){
 	return atoi(buff);
 }
 
-static int _proto_readparam_redis(const char *src, int src_size, uint32_t *pos, proto_chunk *chunk){
+static int _proto_readparam_redis(const char *src, int src_size, uint32_t *pos, proto_chunk_t *chunk){
 	if (*pos + 1 > src_size){
 		g_proto_error = ERR_BUFFER_NOT_READ;
 		return -1;
@@ -111,7 +166,7 @@ static int _proto_readparam_redis(const char *src, int src_size, uint32_t *pos, 
 	return 0;
 }
 
-static int _proto_parse_redis(proto_client *r, const char *src, int src_size){
+static int _proto_parse_redis(proto_client_t *r, const char *src, uint32_t src_size){
 	memset(r, 0, sizeof(*r));
 
 	if (src_size < 8){	// 4 bytes - "*1\r\n$1\r\n"
@@ -155,30 +210,32 @@ static int _proto_parse_redis(proto_client *r, const char *src, int src_size){
 	return 0;
 }
 
-int proto_parse(proto_client *r, const char *src, int src_size){
-	return _proto_parse_redis(r, src, src_size);
+static proto_response_buffer_t *_proto_response_allocate_string(const char *data){
+	uint32_t data_size = strlen(data);
+
+	proto_response_buffer_t *buffer = malloc(sizeof(buffer) + data_size);
+
+	if (buffer == NULL)
+		return NULL;
+
+	buffer->data_size = data_size;
+	memcpy(buffer->data, data, data_size);
+
+	return buffer;
 }
 
-void proto_dump(const proto_client *r){
-	printf("Listing redis client %p\n", r);
+static proto_response_buffer_t *_proto_response_allocate_value(const char *value, uint32_t value_size){
+	uint32_t data_size = snprintf(NULL, 0, REDIS_VALUE, value_size, value_size, value);
 
-	if (! r->chunk_count){
-		printf("no data\n");
-		return;
-	}
+	proto_response_buffer_t *buffer = malloc(sizeof(buffer) + data_size);
 
-	unsigned char i;
-	for(i = 0; i < r->chunk_count; i++){
-		uint32_t size = r->chunks[i].size;
+	if (buffer == NULL)
+		return NULL;
 
-		const char *data = r->chunks[i].data;
+	buffer->data_size = data_size;
+	sprintf(buffer->data, REDIS_VALUE, value_size, value_size, value);
 
-		if (size){
-			printf("%u | %5d | %.*s\n", i, size, size, data);
-		}else{
-			printf("%u | %5d | %s\n", i, size, "(none)");
-		}
-	}
+	return buffer;
 }
 
 /*

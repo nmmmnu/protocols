@@ -2,8 +2,9 @@
 
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
 
-static void _proto_test_redis(proto_client *r, const char *test){
+static void _test_redis(proto_client_t *r, const char *test){
 	printf("Test #2 - incremental add\n");
 
 	size_t size = strlen(test);
@@ -34,18 +35,33 @@ static void _proto_test_redis(proto_client *r, const char *test){
 	printf("OK\n");
 }
 
+static void _test_redis_resp(proto_response_buffer_t *resp){
+	if (resp == NULL)
+		return;
+
+	const char *mask = "begin>>%.*s<<end\n\n";
+	printf(mask, resp->data_size, resp->data);
+	free(resp);
+}
 
 int main(){
-	proto_client r_placeholder;
-	proto_client *r = & r_placeholder;
+	proto_client_t r_placeholder;
+	proto_client_t *r = & r_placeholder;
 
-	_proto_test_redis(r, "*2\r\n$3\r\nGET\r\n$2\r\nBG\r\n");
-	_proto_test_redis(r, "*3\r\n$3\r\nSET\r\n$2\r\nBG\r\n$5\r\nSofia\r\n");
+	_test_redis(r, "*2\r\n$3\r\nGET\r\n$2\r\nBG\r\n");
+	_test_redis(r, "*3\r\n$3\r\nSET\r\n$2\r\nBG\r\n$5\r\nSofia\r\n");
 
-//	_proto_test_redis(r, "*3\r\n$2\r\nSET\r\n$2\r\nBG\r\n$5\r\nSofia\r\n");
-//	_proto_test_redis(r, "*2\r\n$5\r\nSET\r\n$2\r\nBG\r\n$5\r\nSofia\r\n");
-//	_proto_test_redis(r, "*42\r\n$5\r\nSET\r\n$2\r\nBG\r\n$5\r\nSofia\r\n");
-//	_proto_test_redis(r, "*\r\n$5\r\nSET\r\n$2\r\nBG\r\n$5\r\nSofia\r\n");
+//	_test_redis(r, "*3\r\n$2\r\nSET\r\n$2\r\nBG\r\n$5\r\nSofia\r\n");
+//	_test_redis(r, "*2\r\n$5\r\nSET\r\n$2\r\nBG\r\n$5\r\nSofia\r\n");
+//	_test_redis(r, "*42\r\n$5\r\nSET\r\n$2\r\nBG\r\n$5\r\nSofia\r\n");
+//	_test_redis(r, "*\r\n$5\r\nSET\r\n$2\r\nBG\r\n$5\r\nSofia\r\n");
+
+	_test_redis_resp(proto_response(PROTO_RESPONSE_OK,		NULL, 0));
+	_test_redis_resp(proto_response(PROTO_RESPONSE_ERR,		NULL, 0));
+	_test_redis_resp(proto_response(PROTO_RESPONSE_NOT_FOUND,	NULL, 0));
+
+	_test_redis_resp(proto_response(PROTO_RESPONSE_VALUE,		"hello", 5));
+	_test_redis_resp(proto_response(PROTO_RESPONSE_VALUE,		"sir", 3));
 
 	return 0;
 }
