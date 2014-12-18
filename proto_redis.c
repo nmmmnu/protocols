@@ -4,9 +4,9 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define MAX_CHUNKS	PROTO_REDIS_MAX_CHUNKS
-#define MAX_CHUNK_SIZE	PROTO_REDIS_MAX_CHUNK_SIZE
-#define MAX_BUFFER	PROTO_REDIS_MAX_BUFFER
+#define MAX_CHUNKS	PROTO_MAX_CHUNKS
+#define MAX_CHUNK_SIZE	PROTO_MAX_CHUNK_SIZE
+#define MAX_BUFFER	PROTO_MAX_BUFFER
 #define INT_BUFFER_SIZE	20
 
 #define REDIS_STAR	'*'
@@ -19,7 +19,7 @@ const char* g_proto_error;
 #define  ERR_BUFFER_NOT_READ	"buffer not read complete, non fatal error"
 #define  ERR_NO_STAR		"no " STR_HELPER(REDIS_STAR)   " at the beginnging"
 #define  ERR_NO_DOLLAR		"no " STR_HELPER(REDIS_DOLLAR) " at the beginnging"
-#define  ERR_PARAM_COUNT	"param count can not be 0 or can not be more than " STR_HELPER(PROTO_REDIS_MAX_CHUNKS)
+#define  ERR_PARAM_COUNT	"param count can not be 0 or can not be more than " STR_HELPER(PROTO_MAX_CHUNKS)
 #define  ERR_BIG_CHUNK		"chunk too big"
 
 
