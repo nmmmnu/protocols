@@ -1,5 +1,5 @@
 a.out
-proto_redis_test
+test_proto_redis
 *.o
 x.c
 

@@ -12,8 +12,8 @@ clean:
 
 
 
-proto_redis_test: proto_redis.o proto_redis_test.o
-	$(LINK) proto_redis_test proto_redis.o proto_redis_test.o
+test_proto_redis: proto_redis.o test_proto_redis.o
+	$(LINK) test_proto_redis proto_redis.o test_proto_redis.o
 
 
 
@@ -22,4 +22,3 @@ test_proto_redis.o: test_proto_redis.c proto.h
 
 proto_redis.o: proto_redis.c proto.h
 	$(CC) proto_redis.c
-
